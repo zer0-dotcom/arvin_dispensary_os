@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+
+# Local secrets — NEVER commit
+.env
+.env.local
+
+# Persisted sweep snapshots (data output, not source)
+data/competitor-sweeps/*.json
+!data/competitor-sweeps/.gitkeep

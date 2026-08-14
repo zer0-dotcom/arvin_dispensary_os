@@ -1,0 +1,27 @@
+{
+  "name": "arvin-dispensary-os",
+  "version": "1.0.0",
+  "description": "Internal read-only tooling for Arvin's NYC dispensary operation: Dutchie POS integration, competitor radar, and tiered alerting. Source-code only; operator runs it on their own infrastructure.",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify-nodes": "ts-node scripts/verify-nodes.ts",
+    "competitor-sweep": "ts-node scripts/run-competitor-sweep.ts",
+    "schedule": "ts-node modules/competitor-radar/scheduler.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
