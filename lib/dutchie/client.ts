@@ -50,6 +50,10 @@ export interface DutchieProduct {
   readonly category?: string;
   readonly price?: number;
   readonly quantityAvailable?: number;
+  /** Recommended (retail) price, when the API provides it separately. */
+  readonly recPrice?: number;
+  /** Internal unit cost / COGS, when available. Used for margin math. */
+  readonly unitCost?: number;
 }
 
 export interface NodeVerificationResult {
@@ -200,6 +204,12 @@ export class DutchieReadOnlyClient {
             : {}),
           ...(typeof item['quantityAvailable'] === 'number'
             ? { quantityAvailable: item['quantityAvailable'] as number }
+            : {}),
+          ...(typeof item['recPrice'] === 'number'
+            ? { recPrice: item['recPrice'] as number }
+            : {}),
+          ...(typeof item['unitCost'] === 'number'
+            ? { unitCost: item['unitCost'] as number }
             : {}),
         };
         return product;
