@@ -47,8 +47,8 @@ export interface DeadStockFlag {
   readonly productName: string;
   readonly category?: string;
   readonly quantityAvailable: number;
-  readonly lastSoldAt: string | null;
-  readonly daysSinceLastSold: number | null;
+  readonly lastModifiedDateUTC: string | null;
+  readonly daysSinceLastModified: number | null;
   readonly label: 'DEAD_STOCK_CANDIDATE';
   readonly alertTier: AlertTier.TIER_2;
 }
@@ -72,17 +72,17 @@ export interface NodeInventoryItem {
 }
 
 /**
- * Compute days since a lastSoldAt ISO timestamp. Returns null when the
- * timestamp is missing or unparseable (treated as "never sold" by callers).
+ * Compute days since a lastModifiedDateUTC ISO timestamp. Returns null when the
+ * timestamp is missing or unparseable (treated as "never modified" by callers).
  */
 export function daysSince(
-  lastSoldAt: string | undefined,
+  lastModifiedDateUTC: string | undefined,
   now: Date = new Date(),
 ): number | null {
-  if (!lastSoldAt) {
+  if (!lastModifiedDateUTC) {
     return null;
   }
-  const then = new Date(lastSoldAt).getTime();
+  const then = new Date(lastModifiedDateUTC).getTime();
   if (Number.isNaN(then)) {
     return null;
   }
@@ -100,8 +100,12 @@ export function daysSince(
  *
  * Dead stock:
  *   quantityAvailable > DEAD_STOCK_MIN_QTY AND
- *   (lastSoldAt is null OR lastSoldAt older than DEAD_STOCK_STALE_DAYS)
+ *   (lastModifiedDateUTC is null OR lastModifiedDateUTC older than DEAD_STOCK_STALE_DAYS)
  *   -> DEAD_STOCK_CANDIDATE (TIER_2)
+ *
+ *   KNOWN LIMITATION: lastModifiedDateUTC is the last catalog modification date,
+ *   NOT the last sale date. It is the best available proxy from the /products
+ *   endpoint. A dedicated sales velocity endpoint would provide true last-sale data.
  *
  * TIER_2 flags are surfaced via triggerAlert for human review. No auto-actions.
  */
@@ -165,7 +169,7 @@ export function analyzeInventory(
     }
 
     // --- Dead stock detection (independent of margin) ---
-    const days = daysSince(product.lastSoldAt, now);
+    const days = daysSince(product.lastModifiedDateUTC, now);
     const isStale = days === null || days > DEAD_STOCK_STALE_DAYS;
     if (quantityAvailable > DEAD_STOCK_MIN_QTY && isStale) {
       deadStockCandidates.push({
@@ -173,8 +177,8 @@ export function analyzeInventory(
         productName,
         ...(category !== undefined ? { category } : {}),
         quantityAvailable,
-        lastSoldAt: product.lastSoldAt ?? null,
-        daysSinceLastSold: days,
+        lastModifiedDateUTC: product.lastModifiedDateUTC ?? null,
+        daysSinceLastModified: days,
         label: 'DEAD_STOCK_CANDIDATE',
         alertTier: AlertTier.TIER_2,
       });
@@ -201,14 +205,14 @@ export function analyzeInventory(
     triggerAlert(
       AlertTier.TIER_2,
       `DEAD_STOCK_CANDIDATE: ${flag.productName} (qty ${flag.quantityAvailable}, ` +
-        `${flag.daysSinceLastSold === null ? 'never sold' : `${flag.daysSinceLastSold.toFixed(0)}d since sale`})`,
+        `${flag.daysSinceLastModified === null ? 'never modified' : `${flag.daysSinceLastModified.toFixed(0)}d since modified`})`,
       {
         source: 'margin-scanner',
         meta: {
           node: flag.node,
           productName: flag.productName,
           quantityAvailable: flag.quantityAvailable,
-          daysSinceLastSold: flag.daysSinceLastSold,
+          daysSinceLastModified: flag.daysSinceLastModified,
         },
       },
     );

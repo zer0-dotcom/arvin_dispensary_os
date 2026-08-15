@@ -112,9 +112,9 @@ function printScanSummary(result: MarginScanResult): void {
   }
   for (const f of result.deadStockCandidates) {
     const staleness =
-      f.daysSinceLastSold === null
-        ? 'never sold'
-        : `${f.daysSinceLastSold.toFixed(0)}d since sale`;
+      f.daysSinceLastModified === null
+        ? 'never modified'
+        : `${f.daysSinceLastModified.toFixed(0)}d since modified`;
     console.info(
       `  [DEAD_STOCK_CANDIDATE] ${f.productName} — qty ${f.quantityAvailable}, ` +
         `${staleness} [${f.node}]`,

@@ -54,8 +54,8 @@ export interface DutchieProduct {
   readonly recPrice?: number;
   /** Internal unit cost / COGS, when available. Used for margin math. */
   readonly unitCost?: number;
-  /** ISO timestamp of the last sale, when available. Used for dead-stock detection. */
-  readonly lastSoldAt?: string;
+  /** ISO timestamp of the last catalog modification (NOT last sale). Used as a proxy for dead-stock detection. */
+  readonly lastModifiedDateUTC?: string;
 }
 
 export interface NodeVerificationResult {
@@ -213,8 +213,8 @@ export class DutchieReadOnlyClient {
           ...(typeof item['unitCost'] === 'number'
             ? { unitCost: item['unitCost'] as number }
             : {}),
-          ...(typeof item['lastSoldAt'] === 'string'
-            ? { lastSoldAt: item['lastSoldAt'] as string }
+          ...(typeof item['lastModifiedDateUTC'] === 'string'
+            ? { lastModifiedDateUTC: item['lastModifiedDateUTC'] as string }
             : {}),
         };
         return product;
