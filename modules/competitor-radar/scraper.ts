@@ -13,7 +13,7 @@
  *   - No outbound sends / notifications / financial or marketing side effects.
  */
 
-import { AlertTier, guard, triggerAlert } from '../../lib/alerts';
+import { AlertTier, Tier3HaltError, guard, triggerAlert } from '../../lib/alerts';
 
 /** Public competitor storefronts to monitor (all publicly accessible). */
 export const COMPETITOR_TARGETS: readonly string[] = [
@@ -25,8 +25,82 @@ export const COMPETITOR_TARGETS: readonly string[] = [
 ];
 
 const DEFAULT_TIMEOUT_MS = 20_000;
-const USER_AGENT =
-  'ArvinDispensaryOS-CompetitorRadar/1.0 (+read-only public menu monitor)';
+
+/**
+ * User-Agent rotation pool.
+ *
+ * A pool of realistic, current desktop browser User-Agent strings. One is
+ * selected per outbound request (round-robin via `nextUserAgent`) so requests
+ * do not all present an identical UA. Rotation advances PER REQUEST, not per
+ * sweep.
+ */
+const USER_AGENT_POOL: readonly string[] = [
+  // Chrome on Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  // Firefox on Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  // Safari on macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
+  // Chrome on macOS
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  // Edge on Windows
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+];
+
+/** Round-robin cursor for User-Agent selection. */
+let userAgentCursor = 0;
+
+/** Returns the next User-Agent from the pool, advancing per call (per request). */
+export function nextUserAgent(): string {
+  const ua = USER_AGENT_POOL[userAgentCursor % USER_AGENT_POOL.length]!;
+  userAgentCursor += 1;
+  return ua;
+}
+
+/**
+ * Retry policy for competitor scrape HTTP calls.
+ *   - RETRY_ATTEMPTS retries (so up to RETRY_ATTEMPTS + 1 total attempts).
+ *   - Delay before a retry = RETRY_BASE_DELAY_MS * attemptNumber
+ *     (attempt 1 -> 3s, attempt 2 -> 6s).
+ * A TIER_2 alert is only raised AFTER all retries are exhausted (the retry
+ * loop runs INSIDE `guard`). A Tier3HaltError is never retried.
+ */
+const RETRY_ATTEMPTS = 2;
+const RETRY_BASE_DELAY_MS = 3_000;
+
+/** Promise-based async delay. */
+function delay(ms: number): Promise<void> {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+/**
+ * Run `fn` with retries and linear-per-attempt backoff. Retries on any thrown
+ * error EXCEPT `Tier3HaltError`, which is re-thrown immediately (never retried).
+ * If all attempts fail, the final error is thrown to the caller (which, when
+ * called inside `guard`, becomes a single TIER_2 alert).
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  attempts: number = RETRY_ATTEMPTS,
+  baseDelayMs: number = RETRY_BASE_DELAY_MS,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof Tier3HaltError) {
+        throw err; // TIER_3 halts must never be retried.
+      }
+      lastErr = err;
+      if (attempt < attempts) {
+        // Linear-per-attempt backoff: 3s, then 6s, ...
+        await delay(baseDelayMs * (attempt + 1));
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
 
 export interface CompetitorProduct {
   readonly name: string;
@@ -170,30 +244,34 @@ export async function scrapeTarget(
   const fetchedAt = new Date().toISOString();
 
   try {
+    // Retry loop runs INSIDE guard, so a single TIER_2 alert is raised only
+    // after all retries are exhausted. Each attempt gets a fresh, rotated
+    // User-Agent and its own AbortController timeout.
     const html = await guard<string>(
       { source: 'competitor.radar', meta: { target } },
-      async () => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const response = await fetch(target, {
-            method: 'GET',
-            headers: {
-              Accept: 'text/html,application/xhtml+xml',
-              'User-Agent': USER_AGENT,
-            },
-            signal: controller.signal,
-          });
-          if (!response.ok) {
-            throw new Error(
-              `Competitor page responded ${response.status} ${response.statusText}`,
-            );
+      () =>
+        withRetry(async () => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const response = await fetch(target, {
+              method: 'GET',
+              headers: {
+                Accept: 'text/html,application/xhtml+xml',
+                'User-Agent': nextUserAgent(),
+              },
+              signal: controller.signal,
+            });
+            if (!response.ok) {
+              throw new Error(
+                `Competitor page responded ${response.status} ${response.statusText}`,
+              );
+            }
+            return await response.text();
+          } finally {
+            clearTimeout(timer);
           }
-          return await response.text();
-        } finally {
-          clearTimeout(timer);
-        }
-      },
+        }),
       AlertTier.TIER_2,
     );
 
@@ -273,4 +351,179 @@ export async function runSweep(
     failureCount: targets.length - successCount,
     snapshots,
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Price classification + sweep correlation pass
+// ---------------------------------------------------------------------------
+
+/** Pricing recommendation produced by `classifyAlert`. */
+export type PriceRecommendation = 'HOLD' | 'PRICE_MATCH' | 'MARGIN_PROTECT';
+
+/** Inputs to `classifyAlert`. All monetary values are in the same currency. */
+export interface PriceClassificationInput {
+  /** Arvin's own catalog price for the matched product (internal Dutchie). */
+  readonly arvinPrice: number;
+  /** Internal unit cost / COGS for the product (internal product data). */
+  readonly unitCost: number;
+  /** Competitor's scraped price for the matched product. */
+  readonly competitorPrice: number;
+}
+
+/** Result of a price classification. */
+export interface PriceClassification {
+  readonly recommendation: PriceRecommendation;
+  readonly alertTier: AlertTier.TIER_1 | AlertTier.TIER_2;
+}
+
+/**
+ * Classify a competitor price against Arvin's price and unit cost.
+ *
+ * Safety / correctness guards:
+ *   - COGS guard: if `unitCost <= 0` we cannot reason about margin, so we HOLD
+ *     (TIER_1) and never recommend a price move.
+ *   - Divide-by-zero guard: if `arvinPrice <= 0` (or `competitorPrice <= 0`)
+ *     the delta / margin math is undefined, so we HOLD (TIER_1).
+ *
+ * Logic (per spec):
+ *   deltaPct              = ((competitorPrice - arvinPrice) / arvinPrice) * 100
+ *   targetMarginIfMatched = ((competitorPrice - unitCost) / competitorPrice) * 100
+ *   if competitorPrice < arvinPrice AND |deltaPct| > 10:
+ *     targetMarginIfMatched >= 40 -> PRICE_MATCH   (TIER_2)
+ *     else                        -> MARGIN_PROTECT (TIER_1)
+ *   else                          -> HOLD           (TIER_1)
+ */
+export function classifyAlert(
+  input: PriceClassificationInput,
+): PriceClassification {
+  const { arvinPrice, unitCost, competitorPrice } = input;
+
+  // COGS guard — no valid cost basis, so HOLD.
+  if (unitCost <= 0) {
+    return { recommendation: 'HOLD', alertTier: AlertTier.TIER_1 };
+  }
+
+  // Divide-by-zero / nonsensical-price guard — HOLD to avoid NaN/Infinity.
+  if (arvinPrice <= 0 || competitorPrice <= 0) {
+    return { recommendation: 'HOLD', alertTier: AlertTier.TIER_1 };
+  }
+
+  const deltaPct = ((competitorPrice - arvinPrice) / arvinPrice) * 100;
+  const targetMarginIfMatched =
+    ((competitorPrice - unitCost) / competitorPrice) * 100;
+
+  if (competitorPrice < arvinPrice && Math.abs(deltaPct) > 10) {
+    if (targetMarginIfMatched >= 40) {
+      return { recommendation: 'PRICE_MATCH', alertTier: AlertTier.TIER_2 };
+    }
+    return { recommendation: 'MARGIN_PROTECT', alertTier: AlertTier.TIER_1 };
+  }
+
+  return { recommendation: 'HOLD', alertTier: AlertTier.TIER_1 };
+}
+
+/**
+ * An entry from Arvin's internal catalog. Populated by the CALLER from the
+ * internal Dutchie catalog (read-only) — this module never fabricates catalog
+ * data. `matchKey` is the product name used to correlate against scraped
+ * competitor product names.
+ */
+export interface ArvinCatalogEntry {
+  readonly matchKey: string;
+  readonly arvinPrice: number;
+  readonly unitCost: number;
+}
+
+/** A single competitor-vs-Arvin correlation record with its classification. */
+export interface CorrelationRecord {
+  readonly target: string;
+  readonly dispensarySlug: string;
+  readonly competitorProduct: string;
+  readonly competitorPrice: number;
+  readonly matchedCatalogKey: string;
+  readonly arvinPrice: number;
+  readonly unitCost: number;
+  readonly classification: PriceClassification;
+}
+
+/** Normalize a product name for correlation matching. */
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Correlation pass: match scraped competitor products against Arvin's internal
+ * catalog (by normalized product name), run `classifyAlert` per match, and
+ * surface any TIER_2 classifications through the alert system.
+ *
+ * Pure computation over already-fetched data (no network, no writes). TIER_1
+ * results are returned but NOT alerted (informational). No auto-action is ever
+ * taken — recommendations are surfaced only.
+ */
+export function correlateSweep(
+  sweep: SweepResult,
+  catalog: readonly ArvinCatalogEntry[],
+): CorrelationRecord[] {
+  const catalogByKey = new Map<string, ArvinCatalogEntry>();
+  for (const entry of catalog) {
+    catalogByKey.set(normalizeName(entry.matchKey), entry);
+  }
+
+  const records: CorrelationRecord[] = [];
+
+  for (const snapshot of sweep.snapshots) {
+    if (!snapshot.ok) {
+      continue;
+    }
+    for (const product of snapshot.products) {
+      if (typeof product.price !== 'number') {
+        continue; // Cannot correlate without a competitor price.
+      }
+      const match = catalogByKey.get(normalizeName(product.name));
+      if (!match) {
+        continue; // No internal catalog match for this competitor product.
+      }
+
+      const classification = classifyAlert({
+        arvinPrice: match.arvinPrice,
+        unitCost: match.unitCost,
+        competitorPrice: product.price,
+      });
+
+      const record: CorrelationRecord = {
+        target: snapshot.target,
+        dispensarySlug: snapshot.dispensarySlug,
+        competitorProduct: product.name,
+        competitorPrice: product.price,
+        matchedCatalogKey: match.matchKey,
+        arvinPrice: match.arvinPrice,
+        unitCost: match.unitCost,
+        classification,
+      };
+      records.push(record);
+
+      // Surface TIER_2 recommendations (e.g. PRICE_MATCH) via the alert system.
+      // TIER_1 results are informational and simply returned in the records.
+      if (classification.alertTier === AlertTier.TIER_2) {
+        triggerAlert(
+          AlertTier.TIER_2,
+          `Competitor undercut detected: ${product.name} @ ${product.price} ` +
+            `(Arvin ${match.arvinPrice}) -> ${classification.recommendation}`,
+          {
+            source: 'competitor.radar.correlation',
+            meta: {
+              target: snapshot.target,
+              competitorProduct: product.name,
+              competitorPrice: product.price,
+              arvinPrice: match.arvinPrice,
+              recommendation: classification.recommendation,
+            },
+          },
+        );
+      }
+    }
+  }
+
+  return records;
 }
