@@ -13,3 +13,7 @@ data/competitor-sweeps/*.json
 # Persisted margin scans (data output, not source)
 data/margin-scans/*.json
 !data/margin-scans/.gitkeep
+
+# Persisted forward-intelligence outputs (data output, not source)
+data/forward-intel/*.json
+!data/forward-intel/.gitkeep

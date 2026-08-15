@@ -56,6 +56,10 @@ export interface DutchieProduct {
   readonly unitCost?: number;
   /** ISO timestamp of the last catalog modification (NOT last sale). Used as a proxy for dead-stock detection. */
   readonly lastModifiedDateUTC?: string;
+  /** Vendor / brand identifier, when available. Used for vendor scorecards. */
+  readonly vendorId?: string;
+  /** Vendor / brand display name, when available. Used for vendor scorecards. */
+  readonly vendorName?: string;
 }
 
 export interface NodeVerificationResult {
@@ -215,6 +219,12 @@ export class DutchieReadOnlyClient {
             : {}),
           ...(typeof item['lastModifiedDateUTC'] === 'string'
             ? { lastModifiedDateUTC: item['lastModifiedDateUTC'] as string }
+            : {}),
+          ...(typeof item['vendorId'] === 'string'
+            ? { vendorId: item['vendorId'] as string }
+            : {}),
+          ...(typeof item['vendorName'] === 'string'
+            ? { vendorName: item['vendorName'] as string }
             : {}),
         };
         return product;

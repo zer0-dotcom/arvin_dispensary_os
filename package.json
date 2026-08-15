@@ -13,6 +13,9 @@
     "verify-nodes": "ts-node scripts/verify-nodes.ts",
     "competitor-sweep": "ts-node scripts/run-competitor-sweep.ts",
     "margin-scan": "ts-node scripts/run-margin-scan.ts",
+    "demand-forecast": "npx ts-node scripts/run-demand-forecast.ts",
+    "vendor-scorecard": "npx ts-node scripts/run-vendor-scorecard.ts",
+    "weekly-dossier": "npx ts-node scripts/run-weekly-dossier.ts",
     "schedule": "ts-node modules/competitor-radar/scheduler.ts"
   },
   "dependencies": {
