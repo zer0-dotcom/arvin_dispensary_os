@@ -9,3 +9,7 @@ dist/
 # Persisted sweep snapshots (data output, not source)
 data/competitor-sweeps/*.json
 !data/competitor-sweeps/.gitkeep
+
+# Persisted margin scans (data output, not source)
+data/margin-scans/*.json
+!data/margin-scans/.gitkeep

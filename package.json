@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify-nodes": "ts-node scripts/verify-nodes.ts",
     "competitor-sweep": "ts-node scripts/run-competitor-sweep.ts",
+    "margin-scan": "ts-node scripts/run-margin-scan.ts",
     "schedule": "ts-node modules/competitor-radar/scheduler.ts"
   },
   "dependencies": {
