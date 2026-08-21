@@ -17,3 +17,8 @@ data/margin-scans/*.json
 # Persisted forward-intelligence outputs (data output, not source)
 data/forward-intel/*.json
 !data/forward-intel/.gitkeep
+
+# Frontend (Next.js) build + deps
+frontend/.next/
+frontend/node_modules/
+frontend/next-env.d.ts

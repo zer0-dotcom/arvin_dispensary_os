@@ -16,6 +16,8 @@
     "demand-forecast": "npx ts-node scripts/run-demand-forecast.ts",
     "vendor-scorecard": "npx ts-node scripts/run-vendor-scorecard.ts",
     "weekly-dossier": "npx ts-node scripts/run-weekly-dossier.ts",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
     "schedule": "ts-node modules/competitor-radar/scheduler.ts"
   },
   "dependencies": {
