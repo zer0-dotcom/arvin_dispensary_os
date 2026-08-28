@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/run-competitor-sweep.ts
  *
  * Runs ONE competitor-radar sweep end-to-end:

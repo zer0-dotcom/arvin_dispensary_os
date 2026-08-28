@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/run-demand-forecast.ts
  *
  * Runs the demand forecaster across BOTH nodes:

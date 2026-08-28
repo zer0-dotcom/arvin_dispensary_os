@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/probe-inventory-endpoint.ts
  *
  * One-off probe of the /reporting/inventory endpoint to surface available

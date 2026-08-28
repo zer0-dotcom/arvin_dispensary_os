@@ -168,7 +168,7 @@ export class DutchieReadOnlyClient {
     const info = STORE_NODE_INFO[node];
     try {
       // A lightweight read endpoint used purely to confirm the key works.
-      await this.getJson<unknown>(node, '/util/ping');
+      await this.getJson<unknown>(node, '/whoami');
       return {
         node,
         displayName: info.displayName,

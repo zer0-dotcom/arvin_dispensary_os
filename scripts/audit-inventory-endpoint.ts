@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/audit-inventory-endpoint.ts
  *
  * One-off audit of the /reporting/inventory endpoint to discover available

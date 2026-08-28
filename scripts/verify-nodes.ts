@@ -9,6 +9,7 @@
  * the alert system rather than crashing uncleanly.
  */
 
+import 'dotenv/config';
 import {
   ALL_STORE_NODES,
   DutchieReadOnlyClient,

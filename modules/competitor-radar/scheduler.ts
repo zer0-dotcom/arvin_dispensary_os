@@ -20,6 +20,7 @@
  *     schedule itself keeps the process alive for human review.
  */
 
+import 'dotenv/config';
 import cron, { type ScheduledTask } from 'node-cron';
 import { AlertTier, Tier3HaltError, triggerAlert } from '../../lib/alerts';
 import { runSweep, type SweepResult } from './scraper';

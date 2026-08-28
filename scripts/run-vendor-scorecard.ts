@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/run-vendor-scorecard.ts
  *
  * Builds ranked vendor scorecards from the COMBINED dual-node catalog:

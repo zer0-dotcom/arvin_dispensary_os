@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/run-margin-scan.ts
  *
  * Runs ONE margin & dead-stock scan end-to-end:

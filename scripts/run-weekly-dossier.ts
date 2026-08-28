@@ -1,4 +1,5 @@
 /**
+import 'dotenv/config';
  * scripts/run-weekly-dossier.ts
  *
  * Assembles the full weekly Forward Intelligence dossier:
