@@ -62,6 +62,28 @@ export interface DutchieClientOptions {
   readonly timeoutMs?: number;
 }
 
+/**
+ * Return the first argument that is a non-empty (trimmed) string, else undefined.
+ * Scoped helper for the defensive product-name / id fallback below — production
+ * Dutchie catalog payloads have been observed to place the human name / id under
+ * alternate keys, leaving `item.name` / `item.id` empty.
+ */
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/** Safely read a nested object value (e.g. `item.product`) as a record. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 export class FrontendDutchieReadOnlyClient {
   private readonly secrets: DutchieEnvSecrets;
   private readonly timeoutMs: number;
@@ -132,9 +154,32 @@ export class FrontendDutchieReadOnlyClient {
           typeof item === 'object' && item !== null,
       )
       .map((item) => {
+        // Defensive fallback: production Dutchie payloads sometimes carry the
+        // human-readable name / id under alternate keys (or nested under
+        // `product`), leaving the canonical `name` / `id` empty. Resolve across
+        // the known aliases in priority order so reorderWatch / margin / vendor
+        // outputs never end up with `name: ''` / `productId: ''`.
+        const nested = asRecord(item['product']);
+        const resolvedName =
+          firstNonEmptyString(
+            item['name'],
+            item['productName'],
+            nested?.['name'],
+            item['title'],
+            item['productTitle'],
+            item['brand'],
+          ) ?? 'Unnamed Product';
+        const resolvedId =
+          firstNonEmptyString(
+            item['productId'],
+            nested?.['id'],
+            item['id'],
+            item['sku'],
+          ) ?? '';
+
         const product: DutchieProduct = {
-          id: String(item['id'] ?? ''),
-          name: String(item['name'] ?? ''),
+          id: resolvedId,
+          name: resolvedName,
           ...(typeof item['category'] === 'string'
             ? { category: item['category'] as string }
             : {}),
