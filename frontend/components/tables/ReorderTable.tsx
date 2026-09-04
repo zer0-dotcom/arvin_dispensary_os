@@ -1,12 +1,32 @@
 import type { ReorderAlert } from '@/lib/types';
 import { fmtDays, fmtNumber, fmtCurrency } from '@/lib/format';
 
+/**
+ * Row shape accepted by the table. Extends the canonical `ReorderAlert` with
+ * optional alternate product-name fields that may appear in raw dossier JSON
+ * (e.g. `productName`, `product`, `sku`) so the product cell can fall back
+ * safely instead of rendering blank. Kept minimal and scoped to the fallback.
+ */
+type ReorderRow = ReorderAlert &
+  Partial<{
+    productName: string;
+    product: string;
+    sku: string;
+  }>;
+
+/** Resolve a display name across possible field names, in priority order. */
+function productLabel(item: ReorderRow): string {
+  return (
+    item.productName || item.product || item.name || item.sku || 'Unknown Product'
+  );
+}
+
 /** Reorder / overstock table. `variant` only affects the trigger pill color. */
 export default function ReorderTable({
   rows,
   emptyLabel = 'No items.',
 }: {
-  rows: ReorderAlert[];
+  rows: ReorderRow[];
   emptyLabel?: string;
 }) {
   if (rows.length === 0) {
@@ -32,7 +52,7 @@ export default function ReorderTable({
         <tbody>
           {rows.map((r) => (
             <tr key={`${r.productId}-${r.triggerType}`} className="mik-row">
-              <td className="mik-td font-medium">{r.name}</td>
+              <td className="mik-td font-medium">{productLabel(r)}</td>
               <td className="mik-td text-mik-muted">{r.vendorName}</td>
               <td className="mik-td text-right">
                 {fmtNumber(r.quantityAvailable)}
