@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Cannabis } from 'lucide-react';
 import NavSidebar from './NavSidebar';
+import MikCopilot from './MikCopilot';
 
 /**
  * App shell: fixed brand header ("MiK // Retail Intelligence") + left nav +
@@ -38,6 +39,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {/* Content */}
         <main className="min-w-0 flex-1 p-5 md:p-7">{children}</main>
       </div>
+
+      {/* Floating conversational copilot (client component) */}
+      <MikCopilot />
     </div>
   );
 }

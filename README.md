@@ -16,6 +16,58 @@ infrastructure. Nothing here deploys or sends anything outbound.
 | `modules/competitor-radar/scheduler.ts` | `node-cron` scheduler for periodic sweeps. |
 | `scripts/verify-nodes.ts` | Auth-check both store nodes (read-only), per-node pass/fail. |
 | `scripts/run-competitor-sweep.ts` | Run one sweep end-to-end, persist + print summary. |
+| `frontend/` | Next.js 14 (App Router) **read-only** intelligence console. Deployed on Railway with build root = `frontend/`. |
+| `frontend/lib/pipeline/` | **Self-contained** dossier-refresh pipeline (margin scanner, demand forecaster, vendor scorecards, dossier synthesizer). Byte-compatible with the repo-root `modules/` ports, but with zero cross-dir runtime deps so it works on Railway. |
+| `frontend/app/api/cron/dossier/route.ts` | `CRON_SECRET`-protected route that pulls fresh Dutchie catalogs and writes a new weekly dossier + margin scan to `frontend/data/`. |
+| `frontend/app/api/chat/route.ts` + `frontend/components/MikCopilot.tsx` | "MiK" floating conversational copilot — answers NL questions about inventory, margins, dead/overstock, grounded in the latest dossier JSON. |
+
+## Frontend (Next.js console)
+
+The `frontend/` app is deployed on Railway with its **build/deploy root set to
+`frontend/` only**. Because of that, the deployed service cannot read the
+repo-root `modules/`, `lib/`, or `scripts/` directories at runtime
+(`experimental.externalDir` covers local dev only). Two consequences:
+
+1. **The dossier pipeline is ported, self-contained, under `frontend/lib/pipeline/`.**
+   Rather than importing the repo-root `modules/`, the refresh route depends
+   only on files inside `frontend/`. The ports are byte-compatible with the
+   originals so dossier JSON stays interchangeable.
+2. **Dutchie creds come from env vars, not AWS Secrets Manager.** The frontend
+   deliberately avoids pulling the AWS SDK; `frontend/lib/pipeline/dutchie-client.ts`
+   reads `DUTCHIE_API_KEY_5TH_AVE` / `DUTCHIE_API_KEY_9TH_AVE` /
+   `DUTCHIE_API_BASE_URL` directly from `process.env`.
+
+See `frontend/.env.example` for all frontend env vars.
+
+### Refreshing the dossier (protected cron route)
+
+`GET` or `POST` `/api/cron/dossier`, authenticated with `CRON_SECRET`:
+
+```bash
+# either header works
+curl -X POST https://<app>/api/cron/dossier \
+  -H "Authorization: Bearer $CRON_SECRET"
+
+curl -X POST https://<app>/api/cron/dossier \
+  -H "x-cron-secret: $CRON_SECRET"
+```
+
+- Fails **closed** (HTTP 500) if `CRON_SECRET` is not configured.
+- Returns **401** on a missing/mismatched secret (constant-time compare).
+- On success, pulls both nodes' catalogs (`Promise.allSettled`), runs the
+  margin scanner / forecaster / scorecards, synthesizes a dossier, and writes
+  fresh JSON to `frontend/data/forward-intel/` and `frontend/data/margin-scans/`
+  (best-effort mirror to the repo-root `data/` too). Point a Railway cron job at
+  this route to schedule refreshes.
+
+### MiK conversational copilot
+
+A floating chat button (bottom-right, on every page) opens the "MiK" copilot.
+It answers natural-language questions about inventory health, margins, dead
+stock, and overstock — grounded in the latest dossier / margin-scan JSON via
+`POST /api/chat`. With `LLM_API_KEY` (or `ABACUS_API_KEY`) set it uses an
+OpenAI-compatible LLM; without a key it degrades gracefully to a deterministic,
+data-grounded fallback answer. It is **read-only** — it never triggers actions.
 
 ## Setup
 
