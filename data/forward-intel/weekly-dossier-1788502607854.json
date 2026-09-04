@@ -1,0 +1,189 @@
+{
+  "generatedAt": "2026-09-04T06:16:47.852Z",
+  "inventoryHealth": {
+    "skusAnalyzed": 12790,
+    "skusSkippedNoCost": 238,
+    "marginWarningCount": 28,
+    "marginCriticalCount": 101,
+    "deadStockCount": 0
+  },
+  "reorderWatch": {
+    "totalReorder": 200,
+    "totalOverstock": 11604,
+    "topReorder": [
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Fernway New York, LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 0.5541845023148149,
+        "unitCost": 28,
+        "triggerType": "REORDER"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Fernway New York, LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 0.5541845370370371,
+        "unitCost": 28,
+        "triggerType": "REORDER"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Fernway New York, LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 0.5549235879629629,
+        "unitCost": 16,
+        "triggerType": "REORDER"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Fernway New York, LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 0.5549236226851851,
+        "unitCost": 16,
+        "triggerType": "REORDER"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Fernway New York, LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 0.5564777199074074,
+        "unitCost": 25,
+        "triggerType": "REORDER"
+      }
+    ],
+    "topOverstock": [
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Aeterna Cannabis LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 217.42937030092594,
+        "unitCost": 22,
+        "triggerType": "OVERSTOCK"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Aeterna Cannabis LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 217.42937030092594,
+        "unitCost": 20,
+        "triggerType": "OVERSTOCK"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Aeterna Cannabis LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 217.42937030092594,
+        "unitCost": 20,
+        "triggerType": "OVERSTOCK"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Aeterna Cannabis LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 217.42937030092594,
+        "unitCost": 25,
+        "triggerType": "OVERSTOCK"
+      },
+      {
+        "productId": "",
+        "name": "",
+        "vendorName": "Aeterna Cannabis LLC",
+        "quantityAvailable": 0,
+        "daysOnHand": 217.42937030092594,
+        "unitCost": 60,
+        "triggerType": "OVERSTOCK"
+      }
+    ]
+  },
+  "vendorRankings": {
+    "totalVendors": 90,
+    "top3": [
+      {
+        "vendorId": "BYG LLC",
+        "vendorName": "BYG LLC",
+        "skuCount": 10,
+        "avgGrossMarginPct": 58,
+        "avgDaysOnHand": 8.923975956018518,
+        "deadStockCount": 0,
+        "compositeScore": 68.85068269598766,
+        "rank": 1
+      },
+      {
+        "vendorId": "Toke",
+        "vendorName": "Toke",
+        "skuCount": 4,
+        "avgGrossMarginPct": 50,
+        "avgDaysOnHand": 8.923973315972223,
+        "deadStockCount": 0,
+        "compositeScore": 64.05068445601852,
+        "rank": 2
+      },
+      {
+        "vendorId": "Wizard Tree",
+        "vendorName": "Wizard Tree",
+        "skuCount": 22,
+        "avgGrossMarginPct": 54.01339852559366,
+        "avgDaysOnHand": 20.95309710858586,
+        "deadStockCount": 0,
+        "compositeScore": 58.43930770963228,
+        "rank": 3
+      }
+    ],
+    "bottom3": [
+      {
+        "vendorId": "NanoCann Independent Research",
+        "vendorName": "NanoCann Independent Research",
+        "skuCount": 148,
+        "avgGrossMarginPct": -2624.2708968591005,
+        "avgDaysOnHand": 70.07534077702707,
+        "deadStockCount": 102,
+        "compositeScore": 0,
+        "rank": 90
+      },
+      {
+        "vendorId": "(unknown)",
+        "vendorName": "(unknown vendor)",
+        "skuCount": 382,
+        "avgGrossMarginPct": -70.84739519706146,
+        "avgDaysOnHand": 198.56765769148726,
+        "deadStockCount": 374,
+        "compositeScore": 0,
+        "rank": 89
+      },
+      {
+        "vendorId": "Adirondack Hemp Company, Inc",
+        "vendorName": "Adirondack Hemp Company, Inc",
+        "skuCount": 38,
+        "avgGrossMarginPct": 43.6150175205378,
+        "avgDaysOnHand": 217.42937035879635,
+        "deadStockCount": 38,
+        "compositeScore": 26.16901051232268,
+        "rank": 88
+      }
+    ]
+  },
+  "nodeComparison": [
+    {
+      "nodeId": "NODE_5TH_AVE",
+      "totalSKUs": 6520,
+      "reorderCount": 100,
+      "overstockCount": 5802
+    },
+    {
+      "nodeId": "NODE_9TH_AVE",
+      "totalSKUs": 6520,
+      "reorderCount": 100,
+      "overstockCount": 5802
+    }
+  ]
+}

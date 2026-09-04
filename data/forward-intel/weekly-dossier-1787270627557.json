@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-08-21T00:03:47.557Z",
+  "inventoryHealth": {
+    "skusAnalyzed": 0,
+    "skusSkippedNoCost": 0,
+    "marginWarningCount": 0,
+    "marginCriticalCount": 0,
+    "deadStockCount": 0
+  },
+  "reorderWatch": {
+    "totalReorder": 0,
+    "totalOverstock": 0,
+    "topReorder": [],
+    "topOverstock": []
+  },
+  "vendorRankings": {
+    "totalVendors": 0,
+    "top3": [],
+    "bottom3": []
+  },
+  "nodeComparison": []
+}
