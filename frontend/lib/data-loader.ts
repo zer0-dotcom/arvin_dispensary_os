@@ -19,17 +19,29 @@ import type {
 } from './types';
 
 /**
- * Project root that contains `data/`. When Next runs from `/frontend`,
- * `process.cwd()` is the frontend dir, so the default DATA_ROOT is `..`.
+ * Candidate project roots that may contain `data/`.
+ *
+ * In this sandbox / a full monorepo checkout, `process.cwd()` is the
+ * `frontend` dir and `data/` lives one level up (`..`). In production on
+ * Railway, only the `frontend` directory is ever part of the build/deploy
+ * context (Railway's configured root is `/frontend`) — there is no parent
+ * directory to read from at runtime, so the persisted JSON artifacts are
+ * mirrored into `frontend/data/**` and must be read from `.` (cwd itself).
+ *
+ * If `DATA_ROOT` is set, it is used exclusively (no fallback). Otherwise we
+ * try `.` first (the Railway/production layout), then `..` (the monorepo
+ * layout), and use whichever one actually contains matching files.
  */
-function dataRoot(): string {
+function dataRootCandidates(): string[] {
   const fromEnv = process.env['DATA_ROOT'];
-  const root = fromEnv && fromEnv.trim().length > 0 ? fromEnv.trim() : '..';
-  return resolve(process.cwd(), root);
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return [resolve(process.cwd(), fromEnv.trim())];
+  }
+  return [resolve(process.cwd(), '.'), resolve(process.cwd(), '..')];
 }
 
-function dataDir(subdir: string): string {
-  return join(dataRoot(), 'data', subdir);
+function dataDirCandidates(subdir: string): string[] {
+  return dataRootCandidates().map((root) => join(root, 'data', subdir));
 }
 
 /** Pull the trailing numeric timestamp out of a filename, if present. */
@@ -51,26 +63,35 @@ export async function loadLatestArtifact<T>(
   subdir: string,
   prefix: string,
 ): Promise<LoadResult<T>> {
-  const dir = dataDir(subdir);
+  let dir: string | null = null;
+  let candidates: string[] = [];
 
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return { status: 'missing' };
+  for (const candidateDir of dataDirCandidates(subdir)) {
+    let dirEntries: string[];
+    try {
+      dirEntries = await readdir(candidateDir);
+    } catch {
+      continue;
+    }
+    const matches = dirEntries.filter(
+      (f) => f.startsWith(prefix) && f.endsWith('.json'),
+    );
+    if (matches.length > 0) {
+      dir = candidateDir;
+      candidates = matches;
+      break;
+    }
   }
 
-  const candidates = entries.filter(
-    (f) => f.startsWith(prefix) && f.endsWith('.json'),
-  );
-  if (candidates.length === 0) {
+  if (dir === null || candidates.length === 0) {
     return { status: 'missing' };
   }
+  const resolvedDir: string = dir;
 
   // Decorate with sort keys.
   const decorated = await Promise.all(
     candidates.map(async (name) => {
-      const full = join(dir, name);
+      const full = join(resolvedDir, name);
       let mtimeMs = 0;
       try {
         mtimeMs = (await stat(full)).mtimeMs;
