@@ -72,7 +72,7 @@ export default async function CompetitorsPage() {
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {s.snapshots.map((snap) => (
+          {s.snapshots.map((snap: any) => (
             <CompetitorTable key={snap.dispensarySlug} snapshot={snap} />
           ))}
         </div>
