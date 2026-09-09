@@ -36,6 +36,22 @@
  * falls back defensively (summary.* -> real field -> computed length -> 0/[])
  * so it stays correct whether or not a future artifact adds those fields.
  *
+ * CROSS-ARTIFACT JOIN (v1.2) — dossier telemetry
+ * ----------------------------------------------
+ * reorder/overstock/vendor counts are NOT in the margin-scan artifact; they
+ * live in the latest weekly dossier. So this handler ALSO resolves the latest
+ * `weekly-dossier-*.json` (via the same dual-path loadLatestArtifact resolver,
+ * subdir `forward-intel`, prefix `weekly-dossier-`) and sources these live from
+ * it (verified real fields, against frontend/lib/pipeline/dossier-synthesizer.ts):
+ *   reorderWatchCount  <- dossier.reorderWatch.totalReorder
+ *   overstockCount     <- dossier.reorderWatch.totalOverstock
+ *   activeVendorsCount <- dossier.vendorRankings.totalVendors
+ *   nodes[]            <- dossier.nodeComparison[]
+ *                         ({ nodeId, totalSKUs, reorderCount, overstockCount })
+ * The dossier read is strictly NON-BLOCKING: if it is missing/errored, these
+ * fields gracefully fall back to 0 / [] and `dossierFile` is null. Only a
+ * MISSING MARGIN-SCAN artifact yields a 404 (unchanged behavior).
+ *
  * AUTH: `Authorization: Bearer <token>` where <token> matches
  *       process.env.MIK_API_KEY OR process.env.CRON_SECRET (env-only).
  */
@@ -69,6 +85,22 @@ interface ScanArtifact {
     readonly totalVendors?: number;
   };
   readonly catalogPulls?: unknown;
+}
+
+/**
+ * Permissive view over the on-disk weekly-dossier artifact. Only the fields
+ * this endpoint reads are declared. Verified real shape lives in
+ * frontend/lib/pipeline/dossier-synthesizer.ts (WeeklyDossier).
+ */
+interface DossierArtifact {
+  readonly reorderWatch?: {
+    readonly totalReorder?: number;
+    readonly totalOverstock?: number;
+  };
+  readonly vendorRankings?: {
+    readonly totalVendors?: number;
+  };
+  readonly nodeComparison?: unknown;
 }
 
 /** First argument that is a non-empty (trimmed) string, else undefined. */
@@ -160,6 +192,27 @@ export async function GET(request: Request): Promise<NextResponse> {
     const data = result.data;
     const summary = data.summary;
 
+    // --- Resolve latest weekly dossier (NON-BLOCKING cross-artifact join) ---
+    // reorder/overstock/vendor/node metrics live in the dossier, not the margin
+    // scan. A missing/errored dossier must NOT 404 or throw — it degrades to
+    // 0 / [] with dossierFile = null. Only a missing margin scan (above) 404s.
+    let dossier: DossierArtifact | null = null;
+    let dossierFile: string | null = null;
+    try {
+      const dossierResult = await loadLatestArtifact<DossierArtifact>(
+        'forward-intel',
+        'weekly-dossier-',
+      );
+      if (dossierResult.status === 'ok') {
+        dossier = dossierResult.data;
+        dossierFile = dossierResult.sourceFile;
+      }
+    } catch {
+      // Best-effort join: any dossier read failure leaves telemetry at fallback.
+      dossier = null;
+      dossierFile = null;
+    }
+
     // marginCritical -> array of records (defensive).
     const marginCriticalItems: Array<Record<string, unknown>> = Array.isArray(
       data.marginCritical,
@@ -169,10 +222,25 @@ export async function GET(request: Request): Promise<NextResponse> {
             typeof it === 'object' && it !== null,
         ) as Array<Record<string, unknown>>)
       : [];
-    const overstockLen = 0; // Not present in the margin-scan artifact.
-    const reorderLen = 0; // Not present in the margin-scan artifact.
 
-    // --- Telemetry (summary field -> real field -> computed length -> 0) ---
+    // --- Dossier-derived counts (real fields -> summary -> 0) ---
+    // Verified against frontend/lib/pipeline/dossier-synthesizer.ts:
+    //   reorderWatch.totalReorder / reorderWatch.totalOverstock
+    //   vendorRankings.totalVendors
+    const reorderWatchCount = numberOr(
+      dossier?.reorderWatch?.totalReorder,
+      numberOr(summary?.totalReorder, 0),
+    );
+    const overstockCount = numberOr(
+      dossier?.reorderWatch?.totalOverstock,
+      numberOr(summary?.totalOverstock, 0),
+    );
+    const activeVendorsCount = numberOr(
+      dossier?.vendorRankings?.totalVendors,
+      numberOr(summary?.totalVendors, 0),
+    );
+
+    // --- Telemetry (margin scan for SKU/margin, dossier for reorder/vendor) ---
     const telemetry = {
       totalSkusAnalyzed: numberOr(
         summary?.skusAnalyzed,
@@ -182,13 +250,34 @@ export async function GET(request: Request): Promise<NextResponse> {
         summary?.marginCritical,
         marginCriticalItems.length,
       ),
-      reorderWatchCount: numberOr(summary?.totalReorder, reorderLen),
-      overstockCount: numberOr(summary?.totalOverstock, overstockLen),
-      activeVendorsCount: numberOr(summary?.totalVendors, 0),
+      reorderWatchCount,
+      overstockCount,
+      activeVendorsCount,
     };
 
-    // --- Nodes (catalogPulls array or empty) ---
-    const nodes = Array.isArray(data.catalogPulls) ? data.catalogPulls : [];
+    // --- Nodes: prefer live dossier nodeComparison, else margin-scan
+    // catalogPulls, else empty. Existing consumers saw [] here (catalogPulls is
+    // absent from the margin scan), so surfacing the dossier breakdown is
+    // additive and does not remove any previously-present field. ---
+    const dossierNodes: Array<Record<string, unknown>> = Array.isArray(
+      dossier?.nodeComparison,
+    )
+      ? (dossier?.nodeComparison as unknown[]).filter(
+          (it): it is Record<string, unknown> =>
+            typeof it === 'object' && it !== null,
+        )
+      : [];
+    const nodes =
+      dossierNodes.length > 0
+        ? dossierNodes.map((n) => ({
+            nodeId: n['nodeId'] ?? null,
+            totalSKUs: numberOr(n['totalSKUs'], 0),
+            reorderCount: numberOr(n['reorderCount'], 0),
+            overstockCount: numberOr(n['overstockCount'], 0),
+          }))
+        : Array.isArray(data.catalogPulls)
+          ? data.catalogPulls
+          : [];
 
     // --- Optional query params: node filter + limit clamp ---
     const { searchParams } = new URL(request.url);
@@ -220,6 +309,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         service: SERVICE_NAME,
         timestamp: new Date().toISOString(),
         artifactFile: result.sourceFile,
+        dossierFile,
         telemetry,
         nodes,
         marginCriticalSample,
