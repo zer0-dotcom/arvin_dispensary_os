@@ -1,0 +1,50 @@
+{
+  "sweepId": "sweep-1788972829084",
+  "startedAt": "2026-09-09T16:53:49.083Z",
+  "finishedAt": "2026-09-09T16:53:58.220Z",
+  "targetCount": 5,
+  "successCount": 0,
+  "failureCount": 5,
+  "snapshots": [
+    {
+      "target": "https://dutchie.com/dispensary/culture-house",
+      "dispensarySlug": "culture-house",
+      "fetchedAt": "2026-09-09T16:53:49.084Z",
+      "ok": false,
+      "products": [],
+      "note": "Competitor page responded 403 Forbidden"
+    },
+    {
+      "target": "https://dutchie.com/dispensary/medmen-new-york",
+      "dispensarySlug": "medmen-new-york",
+      "fetchedAt": "2026-09-09T16:53:49.121Z",
+      "ok": false,
+      "products": [],
+      "note": "Competitor page responded 403 Forbidden"
+    },
+    {
+      "target": "https://dutchie.com/dispensary/gotham-buds",
+      "dispensarySlug": "gotham-buds",
+      "fetchedAt": "2026-09-09T16:53:49.122Z",
+      "ok": false,
+      "products": [],
+      "note": "Competitor page responded 403 Forbidden"
+    },
+    {
+      "target": "https://dutchie.com/dispensary/the-travel-agency",
+      "dispensarySlug": "the-travel-agency",
+      "fetchedAt": "2026-09-09T16:53:49.122Z",
+      "ok": false,
+      "products": [],
+      "note": "Competitor page responded 403 Forbidden"
+    },
+    {
+      "target": "https://dutchie.com/dispensary/verdi-cannabis",
+      "dispensarySlug": "verdi-cannabis",
+      "fetchedAt": "2026-09-09T16:53:49.123Z",
+      "ok": false,
+      "products": [],
+      "note": "Competitor page responded 403 Forbidden"
+    }
+  ]
+}
