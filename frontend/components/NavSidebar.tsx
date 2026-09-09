@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
+  Gauge,
   Brain,
   Percent,
   Radar,
@@ -18,6 +19,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Executive Dashboard', icon: Gauge },
   { href: '/dossier', label: 'Forward Intel', icon: Brain },
   { href: '/margins', label: 'Margins & Dead Stock', icon: Percent },
   { href: '/competitors', label: 'Competitor Radar', icon: Radar },
