@@ -30,6 +30,41 @@ export interface LlmAnswer {
   readonly model?: string;
 }
 
+/** Result of running a draft-only tool: markdown output (or null if unknown). */
+export interface ToolRunResult {
+  readonly output: string;
+}
+
+/**
+ * A tool runner supplied by the caller (route.ts passes `runTool` from
+ * lib/assistant/tools.ts). Given a tool name + already-parsed args, it returns
+ * the draft markdown, or null when the name is unknown. It performs NO I/O.
+ */
+export type ToolRunner = (
+  name: string,
+  args: Record<string, unknown>,
+) => ToolRunResult | null;
+
+/** OpenAI-compatible tool/function spec (opaque here; defined in tools.ts). */
+export type ToolSpecLike = {
+  readonly type: 'function';
+  readonly function: {
+    readonly name: string;
+    readonly description: string;
+    readonly parameters: Record<string, unknown>;
+  };
+};
+
+/** Optional knobs for askMik — lets route.ts drive persona + tool-calling. */
+export interface AskMikOptions {
+  /** Override the default read-only system prompt. */
+  readonly systemPrompt?: string;
+  /** Function-calling tool specs to advertise to the model. */
+  readonly tools?: readonly ToolSpecLike[];
+  /** Callback that actually runs a chosen tool (pure, no side effects). */
+  readonly toolRunner?: ToolRunner;
+}
+
 const DEFAULT_BASE_URL = 'https://routellm.abacus.ai/v1';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -70,19 +105,64 @@ function fallbackAnswer(userMessage: string, grounding: string): LlmAnswer {
   return { answer, mode: 'fallback' };
 }
 
+interface OpenAiToolCall {
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+}
+
 interface OpenAiChatResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{
+    message?: { content?: string; tool_calls?: OpenAiToolCall[] };
+  }>;
+}
+
+/** Chat message shape we send upstream (system/user/assistant/tool). */
+type OutboundMessage =
+  | { role: 'system' | 'user' | 'assistant'; content: string }
+  | {
+      role: 'assistant';
+      content: string | null;
+      tool_calls: OpenAiToolCall[];
+    }
+  | { role: 'tool'; content: string; tool_call_id: string };
+
+const MAX_TOKENS = 1500;
+
+/**
+ * Safely JSON-parse tool-call arguments into a plain object. Tolerates the
+ * model returning `""` or malformed JSON.
+ */
+function parseToolArgs(raw: string | undefined): Record<string, unknown> {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through to empty args
+  }
+  return {};
 }
 
 /**
  * Ask the LLM a question grounded in the provided data context.
  * `history` is prior turns (excluding the newest user message, which is passed
  * as `userMessage`).
+ *
+ * When `options.tools` + `options.toolRunner` are supplied, the model may invoke
+ * one or more draft-only tools. We run them locally via the (pure) toolRunner
+ * and return their verbatim markdown output, guaranteeing the drafts are never
+ * truncated or hallucinated by a second generation pass.
  */
 export async function askMik(
   userMessage: string,
   grounding: string,
   history: ChatTurn[] = [],
+  options: AskMikOptions = {},
 ): Promise<LlmAnswer> {
   const { baseUrl, apiKey, model } = resolveConfig();
 
@@ -90,38 +170,83 @@ export async function askMik(
     return fallbackAnswer(userMessage, grounding);
   }
 
-  const messages = [
-    { role: 'system' as const, content: SYSTEM_PROMPT },
-    { role: 'system' as const, content: `GROUNDED DATA:\n${grounding}` },
+  const systemPrompt = options.systemPrompt?.trim() || SYSTEM_PROMPT;
+  const tools = options.tools;
+  const toolRunner = options.toolRunner;
+  const useTools =
+    Array.isArray(tools) && tools.length > 0 && typeof toolRunner === 'function';
+
+  const messages: OutboundMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'system', content: `GROUNDED DATA:\n${grounding}` },
     ...history.map((t) => ({ role: t.role, content: t.content })),
-    { role: 'user' as const, content: userMessage },
+    { role: 'user', content: userMessage },
   ];
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const baseBody = {
+      model,
+      temperature: 0.2,
+      max_tokens: MAX_TOKENS,
+    };
+
+    const firstResponse = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model,
+        ...baseBody,
         messages,
-        temperature: 0.2,
-        max_tokens: 700,
+        ...(useTools ? { tools, tool_choice: 'auto' } : {}),
       }),
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      // Upstream failure — degrade gracefully rather than 500.
+    if (!firstResponse.ok) {
       return fallbackAnswer(userMessage, grounding);
     }
 
-    const data = (await response.json()) as OpenAiChatResponse;
-    const content = data.choices?.[0]?.message?.content;
+    const firstData = (await firstResponse.json()) as OpenAiChatResponse;
+    const choice = firstData.choices?.[0]?.message;
+    const toolCalls = choice?.tool_calls;
+
+    // ── Tool-calling path ──────────────────────────────────────────────────
+    if (
+      useTools &&
+      toolRunner &&
+      Array.isArray(toolCalls) &&
+      toolCalls.length > 0
+    ) {
+      const drafts: string[] = [];
+      for (const call of toolCalls) {
+        const name = call.function?.name;
+        if (typeof name !== 'string') {
+          continue;
+        }
+        const args = parseToolArgs(call.function?.arguments);
+        const result = toolRunner(name, args);
+        if (result && result.output.trim().length > 0) {
+          drafts.push(result.output.trim());
+        }
+      }
+      if (drafts.length > 0) {
+        // Return the drafts verbatim (never truncated by a 2nd generation).
+        return {
+          answer: drafts.join('\n\n---\n\n'),
+          mode: 'llm',
+          model,
+        };
+      }
+      // Tools were requested but produced nothing usable — fall through to any
+      // text content, then to fallback.
+    }
+
+    const content = choice?.content;
     if (typeof content === 'string' && content.trim().length > 0) {
       return { answer: content.trim(), mode: 'llm', model };
     }
