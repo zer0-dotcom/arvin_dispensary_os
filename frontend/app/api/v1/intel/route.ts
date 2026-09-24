@@ -285,7 +285,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const limitRaw = searchParams.get('limit');
     const limit = Math.min(parseInt(limitRaw ?? '', 10) || 50, 200);
 
-    let filtered = marginCriticalItems;
+    let filtered = marginCriticalItems.filter(
+      (it: any) => Number(it.quantityAvailable ?? it.quantity ?? it.qty ?? it.stockOnHand ?? 0) > 0
+    );
     if (nodeFilter && nodeFilter.trim().length > 0) {
       filtered = filtered.filter(
         (it) => String(it['node'] ?? '') === nodeFilter,
