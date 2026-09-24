@@ -35,7 +35,17 @@ export default async function DossierPage() {
     );
   }
 
-  const d = res.data;
+  const rawDossier = res.data;
+  const hasInventory = (item: any) => {
+    const q = Number(item.quantityAvailable ?? item.quantity ?? item.qty ?? item.stockOnHand ?? 0);
+    return q > 0;
+  };
+
+  const d = {
+    ...rawDossier,
+    topReorder: (rawDossier.topReorder || []).filter(hasInventory),
+    topOverstock: (rawDossier.topOverstock || []).filter(hasInventory),
+  };
   const empty = isDossierEmpty(d);
 
   return (
