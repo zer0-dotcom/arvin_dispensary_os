@@ -215,13 +215,15 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // marginCritical -> array of records (defensive).
     const marginCriticalItems: Array<Record<string, unknown>> = Array.isArray(
-      data.marginCritical,
-    )
-      ? (data.marginCritical.filter(
-          (it): it is Record<string, unknown> =>
-            typeof it === 'object' && it !== null,
-        ) as Array<Record<string, unknown>>)
-      : [];
+    data.marginCritical,
+  )
+    ? (data.marginCritical.filter(
+        (it: any) =>
+          typeof it === 'object' &&
+          it !== null &&
+          Number(it.quantityAvailable ?? it.quantity ?? it.qty ?? it.stockOnHand ?? 0) > 0,
+      ) as Array<Record<string, unknown>>)
+    : [];
 
     // --- Dossier-derived counts (real fields -> summary -> 0) ---
     // Verified against frontend/lib/pipeline/dossier-synthesizer.ts:
@@ -241,20 +243,16 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
 
     // --- Telemetry (margin scan for SKU/margin, dossier for reorder/vendor) ---
-    const telemetry = {
-      totalSkusAnalyzed: numberOr(
-        summary?.skusAnalyzed,
-        numberOr(data.skusAnalyzed, 0),
-      ),
-      marginCriticalCount: numberOr(
-        summary?.marginCritical,
-        marginCriticalItems.length,
-      ),
-      reorderWatchCount,
-      overstockCount,
-      activeVendorsCount,
-    };
-
+   const telemetry = {
+  totalSkusAnalyzed: numberOr(
+    summary?.skusAnalyzed,
+    numberOr(data.skusAnalyzed, 0),
+  ),
+  marginCriticalCount: marginCriticalItems.length,
+  reorderWatchCount,
+  overstockCount,
+  activeVendorsCount,
+};
     // --- Nodes: prefer live dossier nodeComparison, else margin-scan
     // catalogPulls, else empty. Existing consumers saw [] here (catalogPulls is
     // absent from the margin scan), so surfacing the dossier breakdown is
