@@ -25,7 +25,7 @@ export default async function DossierPage() {
     );
   }
 
-  if (res.status === 'error') {
+ if (res.status === 'error') {
     return (
       <div>
         <h1 className="mb-5 text-lg font-semibold">Forward Intelligence</h1>
@@ -35,17 +35,32 @@ export default async function DossierPage() {
     );
   }
 
-  const rawDossier = res.data;
+  const rawDossier = res.data || {};
   const hasInventory = (item: any) => {
-    const q = Number(item.quantityAvailable ?? item.quantity ?? item.qty ?? item.stockOnHand ?? 0);
+    const q = Number(item?.quantityAvailable ?? item?.quantity ?? item?.qty ?? item?.stockOnHand ?? 0);
     return q > 0;
   };
 
+  const cleanReorder = Array.isArray(rawDossier.topReorder)
+    ? rawDossier.topReorder.filter(hasInventory)
+    : [];
+  const cleanOverstock = Array.isArray(rawDossier.topOverstock)
+    ? rawDossier.topOverstock.filter(hasInventory)
+    : [];
+
   const d = {
     ...rawDossier,
-    topReorder: (rawDossier.topReorder || []).filter(hasInventory),
-    topOverstock: (rawDossier.topOverstock || []).filter(hasInventory),
+    topReorder: cleanReorder,
+    topOverstock: cleanOverstock,
+    reorderWatch: rawDossier.reorderWatch
+      ? {
+          ...rawDossier.reorderWatch,
+          topReorder: cleanReorder,
+          topOverstock: cleanOverstock,
+        }
+      : rawDossier.reorderWatch,
   };
+
   const empty = isDossierEmpty(d);
 
   return (
