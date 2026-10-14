@@ -50,7 +50,7 @@ export default function ReorderTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.filter((it: any) => Number(it.quantityAvailable ?? it.quantity ?? it.qty ?? it.stockOnHand ?? 0) > 0).map((r) => (
             <tr key={`${r.productId}-${r.triggerType}`} className="mik-row">
               <td className="mik-td font-medium">{productLabel(r)}</td>
               <td className="mik-td text-mik-muted">{r.vendorName}</td>
